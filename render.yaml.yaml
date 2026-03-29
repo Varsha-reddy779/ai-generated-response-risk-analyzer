@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ethical-ai-evaluator
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
+    startCommand: gunicorn ethical_ai_evaluator.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.11"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: OPENROUTER_API_KEY
+        value: ""
+      - key: GEMINI_API_KEY
+        value: ""
+      - key: HUGGINGFACE_API_TOKEN
+        value: ""
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "True"

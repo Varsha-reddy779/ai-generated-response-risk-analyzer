@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ethical AI Response Evaluator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --page-bg:#f8fbff;
+      --card-border:#dbe8f5;
+      --accent:#3b82f6;
+      --accent-soft:#eaf3ff;
+      --text:#17324d;
+      --muted:#64809d;
+    }
+    body{
+      background:linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+      color:var(--text);
+    }
+    .navbar, .footer-card, .app-card{
+      background:#fff;
+      border:1px solid var(--card-border);
+      box-shadow:0 10px 30px rgba(43, 85, 146, 0.08);
+    }
+    .hero-badge{
+      background:var(--accent-soft);
+      color:var(--accent);
+      border:1px solid #cfe3ff;
+    }
+    .app-card{
+      border-radius:24px;
+    }
+    .score-ring{
+      width:120px;
+      height:120px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin:auto;
+      background:conic-gradient(var(--accent) calc(var(--score, 0) * 1%), #e5eef9 0);
+    }
+    .score-ring-inner{
+      width:88px;
+      height:88px;
+      border-radius:50%;
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:1.5rem;
+      font-weight:700;
+    }
+    .issue-box mark{
+      background:#fff2b8;
+      padding:0 .2rem;
+      border-radius:.2rem;
+    }
+    .mini-label{
+      color:var(--muted);
+      font-size:.85rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+    .metric-card{
+      border:1px solid var(--card-border);
+      border-radius:18px;
+      background:#fff;
+      height:100%;
+    }
+    .prompt-chip{
+      border:1px solid #cfe3ff;
+      background:#fff;
+      color:var(--text);
+    }
+    .prompt-chip:hover{
+      background:#eef6ff;
+    }
+    .result-panel{
+      min-height:100%;
+    }
+    .chart-shell{
+      position:relative;
+      height:320px;
+      max-height:320px;
+    }
+    .issue-list-panel{
+      min-height:320px;
+    }
+    #curatedLoader, #dashboardSection{
+      display:none;
+    }
+    @media (max-width: 991.98px){
+      .chart-shell,
+      .issue-list-panel{
+        min-height:280px;
+        height:280px;
+      }
+    }
+    @media (max-width: 575.98px){
+      .chart-shell,
+      .issue-list-panel{
+        min-height:auto;
+        height:auto;
+      }
+      .score-ring{
+        width:104px;
+        height:104px;
+      }
+      .score-ring-inner{
+        width:76px;
+        height:76px;
+        font-size:1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg sticky-top">
+    <div class="container py-2">
+      <a class="navbar-brand fw-semibold" href="/">Ethical AI Response Evaluator</a>
+      <div class="ms-auto d-flex gap-2">
+        <a href="/" class="btn btn-outline-primary btn-sm">Home</a>
+        <a href="/ethical-metrics-dashboard/" class="btn btn-outline-primary btn-sm">Metrics</a>
+        <a href="/evaluation-reports/" class="btn btn-outline-primary btn-sm">Reports</a>
+        <a href="/about/" class="btn btn-outline-primary btn-sm">About</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4 py-lg-5">
+    <div class="row g-4 align-items-start">
+      <div class="col-lg-7">
+        <div class="app-card p-4 p-lg-5">
+          <span class="badge hero-badge rounded-pill mb-3 px-3 py-2">Main Dashboard</span>
+          <h1 class="display-6 fw-semibold mb-3">Evaluate AI responses for ethics, safety, privacy, and bias.</h1>
+          <p class="text-secondary mb-4">Enter a prompt, run the evaluator, and inspect the final ethical score with issue highlights and explanation.</p>
+
+          {% if error_message %}
+          <div class="alert alert-danger">{{ error_message }}</div>
+          {% endif %}
+
+          <form id="evaluateForm" method="POST" action="/evaluate/">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="promptInput" class="form-label fw-semibold">AI Response Input</label>
+              <textarea class="form-control form-control-lg" id="promptInput" name="prompt" rows="7" placeholder="Paste or write the AI response/prompt you want to evaluate..." required>{% if prompt %}{{ prompt }}{% endif %}</textarea>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              <button class="btn btn-primary px-4" type="submit" id="evaluateBtn">Evaluate</button>
+              <button class="btn btn-outline-primary px-4" type="button" id="curatedBtn">Run Curated Test</button>
+            </div>
+          </form>
+
+          <div class="mt-4">
+            <div class="mini-label mb-2">Quick Prompts</div>
+            <div class="d-flex flex-wrap gap-2">
+              {% for p in curated_prompts|slice:":6" %}
+              <button type="button" class="btn btn-sm prompt-chip prompt-fill">{{ p }}</button>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="row g-3 mt-4">
+            <div class="col-sm-6">
+              <div class="metric-card p-3">
+                <div class="mini-label">Curated Safe Prompts</div>
+                <div class="fs-3 fw-semibold">{{ safe_count }}</div>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="metric-card p-3">
+                <div class="mini-label">Curated Unsafe Prompts</div>
+                <div class="fs-3 fw-semibold">{{ unsafe_count }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="app-card p-4 result-panel">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="mini-label">Ethical Score</div>
+              <h2 class="h4 mb-0">Result Summary</h2>
+            </div>
+            <span class="badge text-bg-light border" id="behaviorBadge">{{ behavior|default:"Awaiting evaluation" }}</span>
+          </div>
+
+          <div class="score-ring mb-3" id="scoreRing" style="--score:{% if ethical_score %}{{ ethical_score }}{% else %}0{% endif %};">
+            <div class="score-ring-inner" id="ethicalScoreValue">{% if ethical_score %}{{ ethical_score }}{% else %}--{% endif %}</div>
+          </div>
+
+          <div class="row g-3 text-center mb-3">
+            <div class="col-4">
+              <div class="mini-label">Prompt Safety</div>
+              <div class="fw-semibold" id="promptSafetyText">{{ prompt_safety|default:"-" }}</div>
+            </div>
+            <div class="col-4">
+              <div class="mini-label">Response Safety</div>
+              <div class="fw-semibold" id="responseSafetyText">{{ response_safety|default:"-" }}</div>
+            </div>
+            <div class="col-4">
+              <div class="mini-label">Category</div>
+              <div class="fw-semibold" id="promptCategoryText">{{ prompt_category|default:"-" }}</div>
+            </div>
+          </div>
+
+          <div class="mini-label mb-1">Confidence Score</div>
+          <div class="fw-semibold mb-3" id="confidenceScoreText">{{ confidence_score|default:"-" }}</div>
+
+          <div class="mini-label mb-2">Explanation Panel</div>
+          <div class="border rounded-4 p-3 bg-light-subtle mb-3" id="evaluationText">{{ evaluation|default:"Run an evaluation to see the explanation here."|linebreaksbr }}</div>
+
+          <div class="mini-label mb-2">Issue Highlighting</div>
+          <div class="border rounded-4 p-3 bg-white issue-box" id="responseHighlighted">
+            {% if response_highlighted %}{{ response_highlighted }}{% else %}Detected issue phrases will be highlighted here after evaluation.{% endif %}
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <a class="btn btn-outline-primary btn-sm" href="/evaluation-reports/">Evaluation Reports</a>
+            <a class="btn btn-primary btn-sm" href="/export-report">Download Evaluation Report</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="dashboardSection" class="mt-4" {% if has_result %}style="display:block"{% endif %}>
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <div class="app-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <div class="mini-label">Visualization</div>
+                <h3 class="h4 mb-0">Ethical Score Dashboard</h3>
+              </div>
+              <span class="badge text-bg-primary-subtle text-primary-emphasis" id="finalScoreBadge">Final Score: {% if ethical_score %}{{ ethical_score }}{% else %}0{% endif %}</span>
+            </div>
+            <div class="chart-shell">
+              <canvas id="scoreChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="app-card p-4 h-100 issue-list-panel">
+            <div class="mini-label mb-2">Detected Issues</div>
+            <ul class="list-group list-group-flush" id="issueSummaryList">
+              {% if issue_summary %}
+                {% for issue in issue_summary %}
+                <li class="list-group-item px-0">{{ issue }}</li>
+                {% endfor %}
+              {% else %}
+                <li class="list-group-item px-0">No evaluation yet.</li>
+              {% endif %}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-4">
+      <div class="app-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <div class="mini-label">Curated Benchmark</div>
+            <h3 class="h4 mb-0">Run Curated Test</h3>
+          </div>
+          <div id="curatedLoader" class="text-primary">Running curated tests...</div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Prompt</th>
+                <th>Ethical Score</th>
+                <th>Behavior</th>
+                <th>Top Issue</th>
+              </tr>
+            </thead>
+            <tbody id="curatedResultsBody">
+              <tr>
+                <td colspan="4" class="text-secondary">Curated test results will appear here.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-card rounded-4 p-4 mt-4">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="mini-label">Toxicity</div>
+          <div>{{ category_counts.violence|default:0 }} flagged curated prompts</div>
+        </div>
+        <div class="col-md-4">
+          <div class="mini-label">Bias</div>
+          <div>{{ category_counts.bias|default:0 }} flagged curated prompts</div>
+        </div>
+        <div class="col-md-4">
+          <div class="mini-label">Risk Categories</div>
+          <div>Illegal: {{ category_counts.illegal|default:0 }}, Self-harm: {{ category_counts.selfharm|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  {{ scores|json_script:"initialScores" }}
+
+  <script>
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const evaluateForm = document.getElementById('evaluateForm');
+    const promptInput = document.getElementById('promptInput');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const curatedBtn = document.getElementById('curatedBtn');
+    const curatedLoader = document.getElementById('curatedLoader');
+    const curatedResultsBody = document.getElementById('curatedResultsBody');
+    const scoreRing = document.getElementById('scoreRing');
+    const ethicalScoreValue = document.getElementById('ethicalScoreValue');
+    const evaluationText = document.getElementById('evaluationText');
+    const responseHighlighted = document.getElementById('responseHighlighted');
+    const issueSummaryList = document.getElementById('issueSummaryList');
+    const behaviorBadge = document.getElementById('behaviorBadge');
+    const promptSafetyText = document.getElementById('promptSafetyText');
+    const responseSafetyText = document.getElementById('responseSafetyText');
+    const promptCategoryText = document.getElementById('promptCategoryText');
+    const finalScoreBadge = document.getElementById('finalScoreBadge');
+    const confidenceScoreText = document.getElementById('confidenceScoreText');
+
+    const initialScoresNode = document.getElementById('initialScores');
+    const initialScores = initialScoresNode && initialScoresNode.textContent ? JSON.parse(initialScoresNode.textContent) : {};
+
+    const scoreChart = new Chart(document.getElementById('scoreChart'), {
+      type: 'bar',
+      data: {
+        labels: ['Safety', 'Bias', 'Toxicity', 'Privacy', 'Fairness', 'Hallucination'],
+        datasets: [{
+          label: 'Score',
+          data: [
+            initialScores.safety || 0,
+            initialScores.bias || 0,
+            initialScores.toxicity || 0,
+            initialScores.privacy || 0,
+            initialScores.fairness || 0,
+            initialScores.hallucination || 0
+          ],
+          backgroundColor: ['#2563eb', '#60a5fa', '#93c5fd', '#7dd3fc', '#38bdf8', '#0ea5e9'],
+          borderRadius: 10
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, max: 100 }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+
+    if ({{ has_result|yesno:"true,false" }}) {
+      dashboardSection.style.display = 'block';
+    }
+
+    document.querySelectorAll('.prompt-fill').forEach((button) => {
+      button.addEventListener('click', () => {
+        promptInput.value = button.textContent.trim();
+      });
+    });
+
+    function renderIssueSummary(items) {
+      issueSummaryList.innerHTML = '';
+      items.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item px-0';
+        li.textContent = item;
+        issueSummaryList.appendChild(li);
+      });
+    }
+
+    async function parseApiResponse(response) {
+      const contentType = response.headers.get('content-type') || '';
+      const rawText = await response.text();
+
+      if (contentType.includes('application/json')) {
+        try {
+          return JSON.parse(rawText);
+        } catch (error) {
+          throw new Error('Invalid JSON response from server.');
+        }
+      }
+
+      if (rawText.trim().startsWith('<')) {
+        throw new Error('Server returned an HTML error page. Please try again.');
+      }
+
+      throw new Error(rawText || 'please try again');
+    }
+
+    function renderEvaluationResult(data) {
+      dashboardSection.style.display = 'block';
+      scoreRing.style.setProperty('--score', data.ethical_score || 0);
+      ethicalScoreValue.textContent = data.ethical_score ?? '--';
+      evaluationText.innerHTML = (data.evaluation || 'No explanation available.').replace(/\n/g, '<br>');
+      responseHighlighted.innerHTML = data.response_highlighted || 'No highlighted issues.';
+      behaviorBadge.textContent = data.behavior || 'Unknown';
+      promptSafetyText.textContent = data.prompt_safety || '-';
+      responseSafetyText.textContent = data.response_safety || '-';
+      promptCategoryText.textContent = data.prompt_category || '-';
+      confidenceScoreText.textContent = data.confidence_score ?? '-';
+      finalScoreBadge.textContent = `Final Score: ${data.ethical_score || 0}`;
+      renderIssueSummary(data.issue_summary || ['No issues detected.']);
+
+      scoreChart.data.datasets[0].data = [
+        data.scores.safety,
+        data.scores.bias,
+        data.scores.toxicity,
+        data.scores.privacy,
+        data.scores.fairness,
+        data.scores.hallucination
+      ];
+      scoreChart.update();
+    }
+
+    evaluateForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const formData = new FormData(evaluateForm);
+
+      try {
+        const response = await fetch('/evaluate/', {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: formData
+        });
+
+        const data = await parseApiResponse(response);
+        if (!response.ok || data.error) {
+          throw new Error(data.message || 'please try again');
+        }
+
+        renderEvaluationResult(data);
+      } catch (error) {
+        alert(error.message || 'please try again');
+      }
+    });
+
+    curatedBtn.addEventListener('click', async () => {
+      curatedLoader.style.display = 'block';
+      curatedResultsBody.innerHTML = '<tr><td colspan="4" class="text-secondary">Running curated tests...</td></tr>';
+
+      try {
+        const response = await fetch('/curated-tests/?format=json', {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          }
+        });
+        const data = await parseApiResponse(response);
+        if (!response.ok || data.error) {
+          throw new Error(data.message || 'please try again');
+        }
+
+        curatedResultsBody.innerHTML = '';
+        data.results.forEach((item) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${item.prompt}</td>
+            <td><span class="badge text-bg-primary-subtle text-primary-emphasis">${item.ethical_score}</span></td>
+            <td>${item.behavior || 'Unknown'}</td>
+            <td>${(item.issue_summary && item.issue_summary[0]) || 'No issues detected'}</td>
+          `;
+          curatedResultsBody.appendChild(row);
+        });
+      } catch (error) {
+        curatedResultsBody.innerHTML = `<tr><td colspan="4" class="text-danger">${error.message || 'please try again'}</td></tr>`;
+      } finally {
+        curatedLoader.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

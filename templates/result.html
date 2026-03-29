@@ -1,0 +1,196 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<title>Evaluation Result</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{
+  --bg:#0f0f1a;
+  --card:#1e1e2f;
+  --accent:#6c63ff;
+  --safe:#4CAF50;
+  --unsafe:#FF4C4C;
+  --text:#f5f6ff;
+  --muted:#b8b8d9;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:'Space Grotesk',Arial,sans-serif;
+  background:radial-gradient(1000px 600px at 10% -10%, #23234a 0%, rgba(15,15,26,0) 60%),
+             radial-gradient(900px 500px at 100% 0%, #1c1c3a 0%, rgba(15,15,26,0) 55%),
+             var(--bg);
+  color:var(--text);
+}
+.container{
+  max-width:1200px;
+  margin:40px auto 80px;
+  padding:0 20px;
+}
+.header{
+  text-align:center;
+  margin-bottom:30px;
+}
+.header h1{
+  margin:0;
+  font-size:32px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:20px;
+}
+.card{
+  background:var(--card);
+  padding:22px;
+  border-radius:16px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.4);
+}
+.title{
+  color:var(--accent);
+  font-size:18px;
+  margin-bottom:10px;
+  font-weight:600;
+}
+pre{
+  white-space:pre-wrap;
+  margin:0;
+  color:var(--text);
+  font-family:'Space Grotesk',Arial,sans-serif;
+}
+.metrics{
+  margin-bottom:20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
+}
+.metric-card{
+  background:var(--card);
+  border-radius:14px;
+  padding:16px;
+  box-shadow:0 8px 20px rgba(0,0,0,0.35);
+}
+.metric-title{
+  color:var(--muted);
+  font-size:13px;
+  text-transform:uppercase;
+  letter-spacing:1px;
+}
+.metric-value{
+  font-size:24px;
+  font-weight:700;
+  margin-top:6px;
+}
+.badge{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:12px;
+  background:#252540;
+  margin-left:6px;
+}
+.badge-safe{background:rgba(76,175,80,0.2); color:var(--safe); border:1px solid rgba(76,175,80,0.5);}
+.badge-unsafe{background:rgba(255,76,76,0.2); color:var(--unsafe); border:1px solid rgba(255,76,76,0.5);}
+.risk-label{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:13px;
+}
+.actions{
+  text-align:center;
+  margin-top:30px;
+}
+button{
+  padding:12px 28px;
+  background:linear-gradient(90deg,#6c63ff,#9f7aea);
+  border:none;
+  border-radius:12px;
+  color:white;
+  cursor:pointer;
+  font-weight:600;
+  transition:transform .2s ease, box-shadow .2s ease;
+  box-shadow:0 8px 18px rgba(108,99,255,0.35);
+}
+button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 12px 24px rgba(108,99,255,0.45);
+}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Evaluation Result</h1>
+    </div>
+
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-title">Prompt Safety</div>
+        <div class="metric-value">
+          {{prompt_safety_pct|default:0}}%
+          <span class="badge {% if prompt_safety == 'Safe' %}badge-safe{% else %}badge-unsafe{% endif %}">{{prompt_safety}}</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Response Safety</div>
+        <div class="metric-value">
+          {{response_safety_pct|default:0}}%
+          <span class="badge {% if response_safety == 'Safe' %}badge-safe{% else %}badge-unsafe{% endif %}">{{response_safety}}</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Prompt Type</div>
+        <div class="metric-value">{{prompt_category}}</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="title">User Prompt</div>
+        <p>{{prompt}}</p>
+      </div>
+
+      <div class="card">
+        <div class="title">AI Generated Response</div>
+        <p>{{response}}</p>
+      </div>
+
+      <div class="card">
+        <div class="title">Safety Evaluation</div>
+        <pre>{{evaluation}}</pre>
+      </div>
+
+      <div class="card">
+        <div class="title">AI Risk Meter</div>
+        <canvas id="riskChart"></canvas>
+        <div class="risk-label">Risk: {{risk_pct|default:0}}% - Safe: {{safe_pct|default:0}}%</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <a href="/"><button>Test Another Prompt</button></a>
+    </div>
+  </div>
+
+<script>
+const riskPct = {{ risk_pct|default:0 }};
+const safePct = 100 - riskPct;
+
+new Chart(document.getElementById("riskChart"),{
+  type:'doughnut',
+  data:{
+    labels:['Safe','Risk'],
+    datasets:[{
+      data:[safePct, riskPct],
+      backgroundColor:['#4CAF50','#FF4C4C']
+    }]
+  },
+  options:{
+    plugins:{legend:{labels:{color:'#f5f6ff'}}}
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ethical Metrics Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body{
+      background:#f8fbff;
+      color:#17324d;
+    }
+    .page-card{
+      max-width:900px;
+      margin:0 auto;
+      background:#fff;
+      border:1px solid #dbe8f5;
+      border-radius:24px;
+      box-shadow:0 10px 30px rgba(43, 85, 146, 0.08);
+    }
+    #radarChart{
+      width:100%;
+      max-width:680px;
+      height:480px;
+      margin:0 auto;
+    }
+    .legend-chip{
+      border:1px solid #cfe3ff;
+      background:#eef6ff;
+      color:#1d4ed8;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-light bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="/">Ethical AI Response Evaluator</a>
+      <div class="d-flex gap-2">
+        <a href="/" class="btn btn-outline-primary btn-sm">Home</a>
+        <a href="/evaluation-reports/" class="btn btn-outline-primary btn-sm">Reports</a>
+        <a href="/about/" class="btn btn-outline-primary btn-sm">About</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-5">
+    <div class="page-card p-4 p-lg-5">
+      <div class="text-center mb-4">
+        <div class="text-uppercase text-primary small fw-semibold">Visualization</div>
+        <h1 class="h2 mb-2">Ethical Metrics Dashboard</h1>
+        <p class="text-secondary mb-0">This dashboard visualizes the latest ethical profile of an evaluated AI response across six normalized dimensions.</p>
+      </div>
+
+      <div id="radarChart"></div>
+
+      <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
+        <span class="badge rounded-pill legend-chip px-3 py-2">Bias</span>
+        <span class="badge rounded-pill legend-chip px-3 py-2">Safety</span>
+        <span class="badge rounded-pill legend-chip px-3 py-2">Fairness</span>
+        <span class="badge rounded-pill legend-chip px-3 py-2">Toxicity</span>
+        <span class="badge rounded-pill legend-chip px-3 py-2">Privacy</span>
+        <span class="badge rounded-pill legend-chip px-3 py-2">Hallucination</span>
+      </div>
+
+      <div class="text-center mt-4">
+        <div class="text-uppercase text-secondary small">Latest Ethical Score</div>
+        <div class="display-6 fw-semibold" id="ethicalScoreValue">0.00</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function loadEthicalMetrics() {
+      try {
+        const response = await fetch('/api/ethical-metrics', {
+          headers: { 'Accept': 'application/json' }
+        });
+        const metrics = await response.json();
+
+        if (!response.ok || metrics.error) {
+          throw new Error(metrics.message || 'please try again');
+        }
+
+        const categories = ['Bias', 'Safety', 'Fairness', 'Toxicity', 'Privacy', 'Hallucination'];
+        const values = [
+          metrics.bias || 0,
+          metrics.safety || 0,
+          metrics.fairness || 0,
+          metrics.toxicity || 0,
+          metrics.privacy || 0,
+          metrics.hallucination || 0
+        ];
+
+        Plotly.newPlot('radarChart', [
+          {
+            type: 'scatterpolar',
+            r: [...values, values[0]],
+            theta: [...categories, categories[0]],
+            fill: 'toself',
+            name: 'Ethical Profile',
+            line: { color: '#2563eb', width: 3 },
+            fillcolor: 'rgba(37, 99, 235, 0.20)'
+          }
+        ], {
+          margin: { t: 20, r: 40, b: 20, l: 40 },
+          showlegend: false,
+          polar: {
+            radialaxis: {
+              visible: true,
+              range: [0, 1],
+              tickformat: '.1f',
+              gridcolor: '#dbe8f5'
+            },
+            angularaxis: {
+              gridcolor: '#e8f0fa'
+            }
+          },
+          paper_bgcolor: '#ffffff',
+          plot_bgcolor: '#ffffff',
+          autosize: true
+        }, { responsive: true, displayModeBar: false });
+
+        document.getElementById('ethicalScoreValue').textContent = (metrics.ethical_score || 0).toFixed(2);
+      } catch (error) {
+        document.getElementById('radarChart').innerHTML = `<div class="alert alert-danger mb-0">${error.message}</div>`;
+      }
+    }
+
+    loadEthicalMetrics();
+  </script>
+</body>
+</html>
